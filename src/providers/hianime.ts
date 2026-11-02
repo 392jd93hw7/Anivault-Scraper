@@ -55,13 +55,23 @@ export async function getHiAnimeEpisodes(animeId: string): Promise<HiAnimeEpisod
   const $ = cheerio.load(data);
 
   // HiAnime's current episode-list AJAX endpoint requires its internal numeric anime ID.
-  let internalAnimeId = '';
-  const syncData = $('#syncData').html();
-  if (syncData) {
-    try {
-      const parsed = JSON.parse(syncData);
-      internalAnimeId = String(parsed?.anime_id || parsed?.animeId || '');
-    } catch { /* fall back to page attributes */ }
+  // Current HiAnime pages expose the numeric anime ID on #ani_detail.
+  // Its data-id is the *current episode ID*, so do not use that for the list endpoint.
+  let internalAnimeId = String(
+    $('#ani_detail').attr('data-anime-id')
+      || $('.anis-content[data-anime-id]').attr('data-anime-id')
+      || ''
+  );
+
+  // Older page variants may expose the ID in syncData or #watch-main.
+  if (!internalAnimeId) {
+    const syncData = $('#syncData').text().trim();
+    if (syncData) {
+      try {
+        const parsed = JSON.parse(syncData);
+        internalAnimeId = String(parsed?.anime_id || parsed?.animeId || '');
+      } catch { /* continue to legacy attributes */ }
+    }
   }
   internalAnimeId ||= String($('#watch-main').attr('data-id') || '');
 
