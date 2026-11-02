@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { cacheGet, cacheSet } from '../utils/cache';
 
-const BASE = (process.env.ANIMEPAHE_BASE_URL || 'https://animepahe.com').replace(/\/$/, '');
+const BASE = (process.env.ANIMEPAHE_BASE_URL || 'https://animepahe.ch').replace(/\/$/, '');
 const API = BASE + '/api';
 const client = axios.create({
   timeout: 15000,
