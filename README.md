@@ -236,3 +236,38 @@ One call instead of chaining several.
 AnimeHeaven does not work when this API is deployed on Vercel. Use Railway or a local deployment to run/test AnimeHeaven instead; a failure on Vercel does not necessarily mean the scraper itself is broken. Anikoto, DesiDub, and direct-ID MegaPlay are also available for streaming. The MAL scraper
 covers anime/character details, episodes, pictures, theme songs, trailers,
 and recommendations, backed by TMDB/Kitsu/AniList for art and thumbnails.
+
+
+### Additional provider adapters: HiAnime and AnimePahe
+
+The existing streaming sources and their routes are unchanged. Two independent
+provider adapters are mounted under `/api/providers`:
+
+| Provider | Search | Episodes | Servers | Watch |
+|---|---|---|---|---|
+| HiAnime | `GET /api/providers/hianime/search?q=` | `GET /api/providers/hianime/anime/:id/episodes` | `GET /api/providers/hianime/episodes/:episodeId/servers` | `GET /api/providers/hianime/watch?serverId=` |
+| AnimePahe | `GET /api/providers/animepahe/search?q=` | `GET /api/providers/animepahe/anime/:id/episodes` | `GET /api/providers/animepahe/anime/:id/episodes/:session/servers` | `GET /api/providers/animepahe/watch?serverId=` |
+
+Example workflow:
+
+```text
+GET /api/providers/animepahe/search?q=naruto
+GET /api/providers/animepahe/anime/{animeId}/episodes
+GET /api/providers/animepahe/anime/{animeId}/episodes/{episodeSession}/servers
+GET /api/providers/animepahe/watch?serverId={encodedServerId}
+```
+
+HiAnime follows the site's watch-page/AJAX structure and can be pointed at a
+maintained compatible domain with `HIANIME_BASE_URL`. AnimePahe uses its
+JSON search/release/links endpoints and preserves the returned Kwik URL as an
+embed. Both adapters currently return an iframe playback contract when the
+provider exposes only an embed; they do not claim to provide direct HLS in
+that case and do not attempt to bypass DRM, login gates, or protected player
+controls. Provider domains and upstream markup/APIs can change, so verify
+availability in your deployment before enabling a source in the app.
+
+Optional environment variables:
+
+- `HIANIME_BASE_URL` (default: `https://hianime.to`)
+- `ANIMEPAHE_BASE_URL` (default: `https://animepahe.ru`)
+
