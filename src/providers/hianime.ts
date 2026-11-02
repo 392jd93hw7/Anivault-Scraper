@@ -70,7 +70,7 @@ export async function getHiAnimeEpisodes(animeId: string): Promise<HiAnimeEpisod
     const dataIds = a.attr('data-ids') || a.attr('data-id') || '';
     const episodePath = pathname(href);
     const id = [animeId, dataIds, encodeURIComponent(episodePath)].join('::');
-    if (watchId && (dataIds || episodePath) && Number.isFinite(num)) {
+    if (dataIds || episodePath) {
       episodes.push({ id, num, title: a.attr('title') || 'Episode ' + numText });
     }
   });
