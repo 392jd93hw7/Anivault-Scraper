@@ -104,6 +104,23 @@ GET /api/episodes?malId=20899&source=megaplay
 
 For **MegaPlay Direct**, the episode list is based on the anime's MAL episode count; no Anikoto title search is used.
 
+#### HiAnime and AnimePahe provider endpoints
+
+Both providers are available through dedicated endpoints and can be selected from the shared playback API.
+
+| Provider | Endpoint |
+|---|---|
+| HiAnime search | `GET /api/providers/hianime/search?q=` |
+| HiAnime episodes | `GET /api/providers/hianime/anime/:id/episodes` |
+| HiAnime servers | `GET /api/servers?source=hianime&ep=1&episodeId={episode.id}&type=sub` |
+| HiAnime playback | `GET /api/watch?source=hianime&ep=1&type=sub&serverId={server.sourceId}` |
+| AnimePahe search | `GET /api/providers/animepahe/search?q=` |
+| AnimePahe episodes | `GET /api/providers/animepahe/anime/:id/episodes` |
+| AnimePahe servers | `GET /api/servers?source=animepahe&ep=1&providerAnimeId={animeId}&episodeSession={episode.session}&type=sub` |
+| AnimePahe playback | `GET /api/watch?source=animepahe&ep=1&type=sub&serverId={server.sourceId}` |
+
+The two providers require their own identifiers. Do not pass an AniList/MAL ID as the HiAnime or AnimePahe provider ID. Their current integration returns iframe/embed playback metadata; direct HLS extraction is not claimed.
+
 #### `GET /api/servers`
 List available servers (sub/dub) for a specific episode.
 | Param | Required | Notes |
