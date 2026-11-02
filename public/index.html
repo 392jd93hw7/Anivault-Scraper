@@ -389,13 +389,36 @@ pre { padding:20px; overflow-x:auto; font-family:var(--mono); font-size:12px; li
         <div class="sic-row"><span class="sic-row-label">Servers</span><span class="sic-row-val">Mirror, VidMoly, StreamRuby, Abyss</span></div>
         <div class="sic-row"><span class="sic-row-label">Audio</span><span class="sic-row-val">Dub (Hindi/Muse/Official), Sub</span></div>
       </div>
+      <div class="source-info-card">
+        <div class="sic-header">
+          <div class="sic-icon">🌸</div>
+          <div><div class="sic-name">HiAnime</div><div class="sic-url">hianime.at</div></div>
+          <span class="sic-tag verify">Embed playback</span>
+        </div>
+        <div class="sic-row"><span class="sic-row-label">Key</span><span class="sic-row-val">hianime</span></div>
+        <div class="sic-row"><span class="sic-row-label">ID format</span><span class="sic-row-val">HiAnime provider anime / episode IDs</span></div>
+        <div class="sic-row"><span class="sic-row-label">Servers</span><span class="sic-row-val">Provider AJAX server list</span></div>
+        <div class="sic-row"><span class="sic-row-label">Playback</span><span class="sic-row-val">Iframe embed URL</span></div>
+      </div>
+
+      <div class="source-info-card">
+        <div class="sic-header">
+          <div class="sic-icon">🎬</div>
+          <div><div class="sic-name">AnimePahe</div><div class="sic-url">animepahe.ch</div></div>
+          <span class="sic-tag verify">Kwik embeds</span>
+        </div>
+        <div class="sic-row"><span class="sic-row-label">Key</span><span class="sic-row-val">animepahe</span></div>
+        <div class="sic-row"><span class="sic-row-label">ID format</span><span class="sic-row-val">AnimePahe anime ID + episode session</span></div>
+        <div class="sic-row"><span class="sic-row-label">Servers</span><span class="sic-row-val">Kwik quality links</span></div>
+        <div class="sic-row"><span class="sic-row-label">Playback</span><span class="sic-row-val">Iframe embed URL</span></div>
+      </div>
     </div>
   </section>
 
   <!-- API TESTER -->
   <section class="section" id="tester">
     <div class="section-title">API Tester</div>
-    <div class="section-sub">Two ways in: the guided streaming flow (search → source → server → watch), or a raw form for any of the ~35 documented endpoints.</div>
+    <div class="section-sub">Two ways in: the guided streaming flow (search → source → server → watch), or a raw form for any documented endpoint. HiAnime and AnimePahe can be searched directly by switching the source first.</div>
 
     <div class="tester-mode-switch">
       <button class="tester-mode-btn active" onclick="setTesterMode('streaming', this)">🎬 Watch &amp; Stream</button>
