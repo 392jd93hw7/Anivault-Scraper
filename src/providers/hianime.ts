@@ -18,6 +18,11 @@ function absolute(value: string): string {
   return new URL(value, BASE).toString();
 }
 
+function pathname(value: string): string {
+  try { return new URL(value, BASE).pathname.replace(/^\//, ''); }
+  catch { return ''; }
+}
+
 /** Search the configured HiAnime-compatible site. Set HIANIME_BASE_URL when its domain changes. */
 export async function searchHiAnime(query: string): Promise<HiAnimeSearchResult[]> {
   const key = 'hianime:search:' + query.toLowerCase().trim();
@@ -30,7 +35,7 @@ export async function searchHiAnime(query: string): Promise<HiAnimeSearchResult[
     const root = $(el);
     const a = root.find('a[href*="/watch/"]').first();
     const href = a.attr('href') || '';
-    const id = href.match(/\/watch\/([^/?#]+)/)?.[1];
+    const id = pathname(href).match(/^watch\/([^/]+)/)?.[1] || '';
     const title = root.find('.film-name, .name, .d-title').first().text().trim() || a.attr('title') || '';
     const image = root.find('img').first().attr('data-src') || root.find('img').first().attr('src') || null;
     if (id && title) items.push({ id, title, image: image ? absolute(image) : null });
@@ -60,10 +65,14 @@ export async function getHiAnimeEpisodes(animeId: string): Promise<HiAnimeEpisod
   $('#w-episodes a[href], #w-episodes a[data-num]').each((_, el) => {
     const a = $(el);
     const href = a.attr('href') || '';
-    const numText = a.attr('data-num') || a.find('.number, .d-title, span').first().text().trim() || href.match(/ep-(\d+(?:\.\d+)?)/)?.[1] || '';
+    const numText = a.attr('data-num') || a.find('.number, .d-title, span').first().text().trim() || pathname(href).match(/ep-(\d+(?:\.\d+)?)/)?.[1] || '';
     const num = Number.parseFloat(numText);
-    const id = a.attr('data-ids') || a.attr('data-id') || href.match(/\/watch\/([^/?#]+\/ep-[^/?#]+)/)?.[1] || '';
-    if (id && Number.isFinite(num)) episodes.push({ id, num, title: a.attr('title') || 'Episode ' + numText });
+    const dataIds = a.attr('data-ids') || a.attr('data-id') || '';
+    const episodePath = pathname(href);
+    const id = [animeId, dataIds, encodeURIComponent(episodePath)].join('::');
+    if (watchId && (dataIds || episodePath) && Number.isFinite(num)) {
+      episodes.push({ id, num, title: a.attr('title') || 'Episode ' + numText });
+    }
   });
   const unique = Array.from(new Map(episodes.map(ep => [ep.id, ep])).values()).sort((a,b) => a.num-b.num);
   if (unique.length) cacheSet(key, unique, 'episodes');
@@ -74,17 +83,15 @@ export async function getHiAnimeServers(episodeId: string): Promise<HiAnimeServe
   const key = 'hianime:servers:' + episodeId;
   const cached = cacheGet<HiAnimeServer[]>(key);
   if (cached) return cached;
-  const [watchId, dataIds, episodePath] = episodeId.split('::');
+  const [animeId, dataIds, encodedPath] = episodeId.split('::');
   let ids = dataIds;
   if (!ids) {
-    if (!watchId) return [];
-    const { data } = await client.get('/watch/' + encodeURIComponent(watchId));
+    if (!animeId || !encodedPath) return [];
+    const { data } = await client.get('/watch/' + encodeURIComponent(animeId));
     const $ = cheerio.load(data);
-    ids = $('#w-episodes a').filter((_, el) => {
-      const a = $(el);
-      const href = (a.attr('href') || '').replace(/^https?:\\/\\/[^/]+/, '').replace(/^\\//, '');
-      return href === episodePath;
-    }).first().attr('data-ids') || '';
+    const targetPath = decodeURIComponent(encodedPath);
+    ids = $('#w-episodes a').filter((_, el) => pathname($(el).attr('href') || '') === targetPath)
+      .first().attr('data-ids') || '';
   }
   if (!ids) return [];
   const { data } = await client.get('/ajax/server/list', {
@@ -108,10 +115,7 @@ export async function getHiAnimeServers(episodeId: string): Promise<HiAnimeServe
   return servers;
 }
 
-/**
- * Return the provider's embed URL. This adapter deliberately does not attempt
- * to defeat DRM, access controls, or protected player encryption.
- */
+/** Return the provider embed URL without attempting to bypass protected playback controls. */
 export async function getHiAnimeStream(sourceId: string): Promise<{ embedUrl: string; playbackMode: 'iframe'; serverName: string } | null> {
   const [linkId, svId] = sourceId.split('::');
   if (!linkId) return null;
