@@ -263,11 +263,11 @@ JSON search/release/links endpoints and preserves the returned Kwik URL as an
 embed. Both adapters currently return an iframe playback contract when the
 provider exposes only an embed; they do not claim to provide direct HLS in
 that case and do not attempt to bypass DRM, login gates, or protected player
-controls. Provider domains and upstream markup/APIs can change, so verify
+controls. HiAnime availability and AnimePahe domain ownership/reachability are not guaranteed by this adapter; the AnimePahe default is the legacy API host and should be changed to a verified domain if needed. Provider domains and upstream markup/APIs can change, so verify
 availability in your deployment before enabling a source in the app.
 
 Optional environment variables:
 
 - `HIANIME_BASE_URL` (default: `https://hianime.to`)
-- `ANIMEPAHE_BASE_URL` (default: `https://animepahe.ru`)
+- `ANIMEPAHE_BASE_URL` (default: `https://animepahe.com`)
 
