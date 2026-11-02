@@ -74,15 +74,16 @@ export async function getHiAnimeServers(episodeId: string): Promise<HiAnimeServe
   const key = 'hianime:servers:' + episodeId;
   const cached = cacheGet<HiAnimeServer[]>(key);
   if (cached) return cached;
-  const [watchId, dataIds] = episodeId.split('::');
+  const [watchId, dataIds, episodePath] = episodeId.split('::');
   let ids = dataIds;
   if (!ids) {
-    const url = episodeId.includes('/ep-') ? '/watch/' + episodeId : '/watch/' + watchId;
-    const { data } = await client.get(url);
+    if (!watchId) return [];
+    const { data } = await client.get('/watch/' + encodeURIComponent(watchId));
     const $ = cheerio.load(data);
     ids = $('#w-episodes a').filter((_, el) => {
       const a = $(el);
-      return (a.attr('href') || '').includes(episodeId) || a.attr('data-id') === episodeId;
+      const href = (a.attr('href') || '').replace(/^https?:\\/\\/[^/]+/, '').replace(/^\\//, '');
+      return href === episodePath;
     }).first().attr('data-ids') || '';
   }
   if (!ids) return [];
