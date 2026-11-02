@@ -62,13 +62,28 @@ export async function getHiAnimeEpisodes(animeId: string): Promise<HiAnimeEpisod
     } catch { /* use server-rendered episodes */ }
   }
   const episodes: HiAnimeEpisode[] = [];
-  $('#w-episodes a[href], #w-episodes a[data-num]').each((_, el) => {
+  $('#w-episodes a[href], #w-episodes a[data-num]').each((index, el) => {
     const a = $(el);
     const href = a.attr('href') || '';
-    const numText = a.attr('data-num') || a.find('.number, .d-title, span').first().text().trim() || pathname(href).match(/ep-(\d+(?:\.\d+)?)/)?.[1] || '';
-    const num = Number.parseFloat(numText);
-    const dataIds = a.attr('data-ids') || a.attr('data-id') || '';
     const episodePath = pathname(href);
+    const candidates = [
+      a.attr('data-number'),
+      a.attr('data-num'),
+      a.attr('data-episode'),
+      episodePath.match(/(?:ep|episode)[-_/]?(\d+(?:\.\d+)?)/i)?.[1],
+      a.attr('title'),
+      a.text(),
+    ].filter(Boolean);
+    let num = Number.NaN;
+    for (const candidate of candidates) {
+      const match = String(candidate).match(/(?:episode|ep)[\s._-]*(\d+(?:\.\d+)?)/i)
+        || String(candidate).match(/^\s*(\d+(?:\.\d+)?)\s*$/);
+      if (match) { num = Number.parseFloat(match[1]); break; }
+    }
+    // Keep the episode list usable even when the upstream markup omits numbering.
+    if (!Number.isFinite(num)) num = index + 1;
+    const numText = String(num);
+    const dataIds = a.attr('data-ids') || a.attr('data-id') || '';
     const id = [animeId, dataIds, encodeURIComponent(episodePath)].join('::');
     if (dataIds || episodePath) {
       episodes.push({ id, num, title: a.attr('title') || 'Episode ' + numText });
