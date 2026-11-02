@@ -494,6 +494,16 @@ pre { padding:20px; overflow-x:auto; font-family:var(--mono); font-size:12px; li
             <span class="source-name">MegaPlay Direct</span>
             <span class="source-url">megaplay.buzz</span>
           </div>
+          <div class="source-card" onclick="setSource('hianime',this)" id="src-hianime">
+            <div class="source-icon">🌸</div>
+            <span class="source-name">HiAnime</span>
+            <span class="source-url">hianime.at</span>
+          </div>
+          <div class="source-card" onclick="setSource('animepahe',this)" id="src-animepahe">
+            <div class="source-icon">🎬</div>
+            <span class="source-name">AnimePahe</span>
+            <span class="source-url">animepahe.ch</span>
+          </div>
         </div>
         <div id="animeHeavenVercelNotice" class="hosting-warning" role="status" style="display:none">
           <strong>⚠️ AnimeHeaven hosting limitation</strong>
@@ -1413,6 +1423,7 @@ GET /api/watch?source=<span class="str">animeheaven</span>&heavenId=<span class=
 // ── STATE
 let selType = 'sub', selSource = 'anikoto', selServer = '', selEndpoint = 'watch';
 let selAnime = null, lastResult = null;
+let providerEpisodes = [], providerServers = [], selProviderEpisode = null, selProviderServer = null;
 let debounceTimer = null;
 
 // ── NAV
@@ -1456,6 +1467,10 @@ function setType(t, btn) {
 }
 function setSource(s, card) {
   selSource = s;
+  selAnime = null; providerEpisodes = []; providerServers = []; selProviderEpisode = null; selProviderServer = null;
+  document.getElementById('selectedAnime').classList.remove('visible');
+  document.getElementById('searchInput').value = '';
+  document.getElementById('searchInput').placeholder = (s === 'hianime' || s === 'animepahe') ? `Search ${s === 'hianime' ? 'HiAnime' : 'AnimePahe'}...` : 'e.g. Naruto, Demon Slayer, One Piece...';
   document.querySelectorAll('.source-card').forEach(c => c.classList.remove('active'));
   card.classList.add('active');
   document.getElementById('heavenIdWrap').style.display = s === 'animeheaven' ? 'block' : 'none';
@@ -1482,10 +1497,11 @@ function selectServer(chip) {
   document.querySelectorAll('.server-chip').forEach(c => c.classList.remove('active'));
   chip.classList.add('active');
   selServer = chip.dataset.server;
+  selProviderServer = chip.dataset.sourceId ? { sourceId: chip.dataset.sourceId, name: chip.dataset.serverName || chip.textContent } : null;
   updateUrlPreview();
 }
 function resetServers() {
-  selServer = '';
+  selServer = ''; selProviderServer = null; providerServers = [];
   document.getElementById('serverChips').innerHTML =
     '<div class="server-chip auto active" data-server="" onclick="selectServer(this)">Auto</div>';
 }
@@ -1508,19 +1524,35 @@ async function loadServers() {
 
   try {
     const base = getBase();
-    const serverUrl = selSource === 'animeheaven' && heavenId
-      ? `${base}/api/servers?source=animeheaven&heavenId=${encodeURIComponent(heavenId)}&ep=${ep}&type=${selType}`
-      : selAnime.id
-        ? `${base}/api/servers?anilistId=${selAnime.id}&ep=${ep}&type=${selType}&source=${selSource}`
-        : `${base}/api/servers?malId=${selAnime.malId}&ep=${ep}&type=${selType}&source=${selSource}`;
+    let serverUrl;
+    if (selSource === 'hianime' || selSource === 'animepahe') {
+      const selectedEp = providerEpisodes.find(x => Number(x.num) === Number(ep));
+      if (!selectedEp) throw new Error('Episode not found for selected source');
+      selProviderEpisode = selectedEp;
+      serverUrl = selSource === 'hianime'
+        ? `${base}/api/providers/hianime/episodes/${encodeURIComponent(selectedEp.id)}/servers`
+        : `${base}/api/providers/animepahe/anime/${encodeURIComponent(selAnime.id)}/episodes/${encodeURIComponent(selectedEp.session)}/servers`;
+    } else {
+      serverUrl = selSource === 'animeheaven' && heavenId
+        ? `${base}/api/servers?source=animeheaven&heavenId=${encodeURIComponent(heavenId)}&ep=${ep}&type=${selType}`
+        : selAnime.id
+          ? `${base}/api/servers?anilistId=${selAnime.id}&ep=${ep}&type=${selType}&source=${selSource}`
+          : `${base}/api/servers?malId=${selAnime.malId}&ep=${ep}&type=${selType}&source=${selSource}`;
+    }
     const res = await fetch(serverUrl);
     const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Server lookup failed');
     const servers = data.servers || [];
-    servers.forEach(s => {
+    providerServers = (selSource === 'hianime' || selSource === 'animepahe') ? servers : [];
+    servers.forEach(server => {
       const chip = document.createElement('div');
       chip.className = 'server-chip';
-      chip.dataset.server = s.name;
-      chip.textContent = s.name + (s.type !== selType ? ` (${s.type})` : '');
+      chip.dataset.server = server.name;
+      if (selSource === 'hianime' || selSource === 'animepahe') {
+        chip.dataset.sourceId = server.sourceId;
+        chip.dataset.serverName = server.name;
+      }
+      chip.textContent = server.name + (server.type && server.type !== selType ? ` (${server.type})` : '');
       chip.onclick = () => selectServer(chip);
       chips.appendChild(chip);
     });
@@ -1529,17 +1561,25 @@ async function loadServers() {
       msg.style.cssText = 'font-family:var(--mono);font-size:11px;color:var(--muted)';
       msg.textContent = 'No servers found';
       chips.appendChild(msg);
+    } else if (selSource === 'hianime' || selSource === 'animepahe') {
+      selProviderServer = servers[0];
+      const firstChip = chips.querySelector('.server-chip:not(.auto)');
+      if (firstChip) selectServer(firstChip);
     }
   } catch(e) {
     const msg = document.createElement('span');
     msg.style.cssText = 'font-family:var(--mono);font-size:11px;color:var(--accent)';
-    msg.textContent = 'Could not load servers';
+    msg.textContent = e.message || 'Could not load servers';
     chips.appendChild(msg);
   }
   label.style.display = 'none';
 }
 
 function onEpChange() {
+  if (selSource === 'hianime' || selSource === 'animepahe') {
+    selProviderEpisode = providerEpisodes.find(x => Number(x.num) === Number(document.getElementById('epInput').value)) || null;
+  }
+  resetServers();
   updateUrlPreview();
   loadServers();
 }
@@ -1556,47 +1596,72 @@ async function doSearch() {
   if (!q) { sr.style.display = 'none'; return; }
 
   sr.style.display = 'block';
-  sr.innerHTML = '<div style="padding:14px 16px;font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px"><div class="spinner"></div>Searching AniList...</div>';
+  const providerMode = selSource === 'hianime' || selSource === 'animepahe';
+  sr.innerHTML = '<div style="padding:14px 16px;font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px"><div class="spinner"></div>Searching ' + (providerMode ? (selSource === 'hianime' ? 'HiAnime' : 'AnimePahe') : 'AniList') + '...</div>';
 
   try {
-    const res = await fetch(`${getBase()}/api/search?q=${encodeURIComponent(q)}`);
+    const searchUrl = providerMode
+      ? `${getBase()}/api/providers/${selSource}/search?q=${encodeURIComponent(q)}`
+      : `${getBase()}/api/search?q=${encodeURIComponent(q)}`;
+    const res = await fetch(searchUrl);
     const data = await res.json();
     const results = data.results || [];
+    if (!res.ok) throw new Error(data.error || 'Search failed');
     if (!results.length) {
       sr.innerHTML = '<div style="padding:14px 16px;font-family:var(--mono);font-size:12px;color:var(--muted)">No results found</div>';
       return;
     }
-    sr.innerHTML = results.map(r => `
-      <div class="search-item" onclick='pickAnime(${JSON.stringify(r).replace(/'/g,"&#39;")})'>
-        <img src="${r.coverImage}" alt="" />
-        <div>
-          <div class="search-item-title">${r.title}</div>
-          <div class="search-item-meta">AniList: ${r.id} · MAL: ${r.malId||'—'} · ${r.format||'—'} · ${r.episodes||'?'} eps</div>
-        </div>
-      </div>`).join('');
+    sr.innerHTML = results.map(r => {
+      const image = r.coverImage || r.image || '';
+      const meta = providerMode
+        ? (selSource === 'animepahe' ? 'AnimePahe ID: ' + r.id : 'HiAnime ID: ' + r.id)
+        : `AniList: ${r.id} · MAL: ${r.malId||'—'} · ${r.format||'—'} · ${r.episodes||'?'} eps`;
+      return `<div class="search-item" onclick='pickAnime(${JSON.stringify(r).replace(/'/g,"&#39;")})'>
+        <img src="${escapeAttr(image)}" alt="" />
+        <div><div class="search-item-title">${escapeAttr(r.title)}</div><div class="search-item-meta">${escapeAttr(meta)}</div></div>
+      </div>`;
+    }).join('');
   } catch(e) {
-    sr.innerHTML = `<div style="padding:14px 16px;font-family:var(--mono);font-size:12px;color:var(--accent)">Error: ${e.message}</div>`;
+    sr.innerHTML = `<div style="padding:14px 16px;font-family:var(--mono);font-size:12px;color:var(--accent)">Error: ${escapeAttr(e.message)}</div>`;
   }
 }
 
-function pickAnime(r) {
+async function pickAnime(r) {
   selAnime = r;
   document.getElementById('searchResults').style.display = 'none';
-  document.getElementById('searchInput').value = r.title;
+  document.getElementById('searchInput').value = r.title || '';
 
+  const providerMode = selSource === 'hianime' || selSource === 'animepahe';
   const el = document.getElementById('selectedAnime');
   el.classList.add('visible');
-  document.getElementById('selCover').src = r.coverImage || '';
-  document.getElementById('selTitle').textContent = r.title;
-  document.getElementById('selAlId').textContent = r.id;
-  document.getElementById('selMalId').textContent = r.malId || '—';
+  document.getElementById('selCover').src = r.coverImage || r.image || '';
+  document.getElementById('selTitle').textContent = r.title || 'Selected anime';
+  document.getElementById('selAlId').textContent = providerMode ? r.id : (r.id || '—');
+  document.getElementById('selMalId').textContent = providerMode ? selSource : (r.malId || '—');
   document.getElementById('selEps').textContent = (r.episodes || '?') + ' eps';
   document.getElementById('selFormat').textContent = r.format || '';
 
+  providerEpisodes = []; providerServers = []; selProviderEpisode = null; selProviderServer = null;
   resetServers();
+  if (providerMode) {
+    try {
+      const url = `${getBase()}/api/providers/${selSource}/anime/${encodeURIComponent(r.id)}/episodes`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not load episodes');
+      providerEpisodes = data.episodes || [];
+      const first = providerEpisodes.find(x => Number(x.num) === Number(document.getElementById('epInput').value)) || providerEpisodes[0];
+      if (first) {
+        selProviderEpisode = first;
+        document.getElementById('epInput').value = first.num;
+      }
+      document.getElementById('selEps').textContent = providerEpisodes.length + ' eps';
+    } catch (e) {
+      document.getElementById('urlPreview').innerHTML = `<span style="color:var(--accent)">Episode load failed: ${escapeAttr(e.message)}</span>`;
+    }
+  }
   updateUrlPreview();
-  const ep = document.getElementById('epInput').value;
-  if (ep) loadServers();
+  if (document.getElementById('epInput').value) loadServers();
 }
 
 function clearSelection() {
@@ -1618,6 +1683,25 @@ function buildUrl() {
     if (selEndpoint === 'episodes') return `${base}/api/episodes?source=animeheaven&heavenId=${encodeURIComponent(heavenId)}`;
   }
   if (!selAnime) return null;
+
+  if (selSource === 'hianime' || selSource === 'animepahe') {
+    const selectedEp = providerEpisodes.find(x => Number(x.num) === Number(ep)) || selProviderEpisode;
+    if (selectedEp) selProviderEpisode = selectedEp;
+    if (selEndpoint === 'episodes') return `${base}/api/providers/${selSource}/anime/${encodeURIComponent(selAnime.id)}/episodes`;
+    if (selEndpoint === 'servers') {
+      if (selSource === 'hianime') return selectedEp
+        ? `${base}/api/providers/hianime/episodes/${encodeURIComponent(selectedEp.id)}/servers` : null;
+      return selectedEp
+        ? `${base}/api/providers/animepahe/anime/${encodeURIComponent(selAnime.id)}/episodes/${encodeURIComponent(selectedEp.session)}/servers` : null;
+    }
+    if (selEndpoint === 'watch') {
+      if (!selProviderServer && providerServers.length) selProviderServer = providerServers[0];
+      return selProviderServer
+        ? `${base}/api/providers/${selSource}/watch?serverId=${encodeURIComponent(selProviderServer.sourceId)}`
+        : null;
+    }
+  }
+
   const id = selAnime.id ? selAnime.id : `mal-${selAnime.malId}`;
   if (selEndpoint === 'watch') {
     let url = `${base}/api/watch/${selSource}/${id}/${ep}/${selType}`;
@@ -1632,6 +1716,7 @@ function buildUrl() {
     : `${base}/api/episodes?malId=${selAnime.malId}&source=${selSource}`;
   return null;
 }
+
 function updateUrlPreview() {
   const url = buildUrl();
   const el = document.getElementById('urlPreview');
@@ -1891,6 +1976,14 @@ const ENDPOINT_REGISTRY = [
   { cat:'Streaming', method:'GET', path:'/api/episodes', desc:'Streaming-source episode list (MegaPlay Direct uses MAL episode count)', query:[['anilistId',false,'20'],['malId',false,'20899'],['source',false,'megaplay']] },
   { cat:'Streaming', method:'GET', path:'/api/servers', desc:'Available servers for one episode', query:[['anilistId',false,'20'],['malId',false,'20899'],['ep',true,'1'],['type',false,'sub'],['source',false,'megaplay'],['heavenId',false,'']] },
   { cat:'Streaming', method:'GET', path:'/api/watch', desc:'Resolve a playable stream (MegaPlay Direct defaults to MAL ID 20899)', query:[['anilistId',false,''],['malId',false,'20899'],['heavenId',false,''],['ep',true,'1'],['type',false,'sub'],['source',false,'megaplay'],['server',false,'']] },
+  { cat:'HiAnime', method:'GET', path:'/api/providers/hianime/search', desc:'Search HiAnime titles', query:[['q',true,'naruto']] },
+  { cat:'HiAnime', method:'GET', path:'/api/providers/hianime/anime/{id}/episodes', desc:'List HiAnime episodes', pathParams:['id'], pathPlaceholders:{id:'naruto-123'}, query:[] },
+  { cat:'HiAnime', method:'GET', path:'/api/providers/hianime/episodes/{episodeId}/servers', desc:'List HiAnime servers', pathParams:['episodeId'], pathPlaceholders:{episodeId:'anime::episode-id::watch-path'}, query:[] },
+  { cat:'HiAnime', method:'GET', path:'/api/providers/hianime/watch', desc:'Resolve HiAnime embed URL', query:[['serverId',true,'SERVER_SOURCE_ID']] },
+  { cat:'AnimePahe', method:'GET', path:'/api/providers/animepahe/search', desc:'Search AnimePahe titles', query:[['q',true,'naruto']] },
+  { cat:'AnimePahe', method:'GET', path:'/api/providers/animepahe/anime/{id}/episodes', desc:'List AnimePahe episodes', pathParams:['id'], pathPlaceholders:{id:'ANIME_ID'}, query:[] },
+  { cat:'AnimePahe', method:'GET', path:'/api/providers/animepahe/anime/{id}/episodes/{session}/servers', desc:'List AnimePahe Kwik servers', pathParams:['id','session'], pathPlaceholders:{id:'ANIME_ID',session:'EPISODE_SESSION'}, query:[] },
+  { cat:'AnimePahe', method:'GET', path:'/api/providers/animepahe/watch', desc:'Resolve AnimePahe embed URL', query:[['serverId',true,'https://kwik...']] },
   { cat:'Streaming', method:'GET', path:'/api/health', desc:'Service status + source list', query:[] },
 
   { cat:'MAL Scraper', method:'GET', path:'/api/mal/anime/{id}', desc:'Full anime details', pathParams:['id'], pathPlaceholders:{id:'16498'}, query:[] },
