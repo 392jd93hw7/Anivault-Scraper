@@ -46,50 +46,67 @@ export async function searchHiAnime(query: string): Promise<HiAnimeSearchResult[
 }
 
 export async function getHiAnimeEpisodes(animeId: string): Promise<HiAnimeEpisode[]> {
-  const key = 'hianime:eps:' + animeId;
+  const key = 'hianime:eps:v2:' + animeId;
   const cached = cacheGet<HiAnimeEpisode[]>(key);
   if (cached) return cached;
-  const { data } = await client.get('/watch/' + encodeURIComponent(animeId));
+
+  const watchUrl = '/watch/' + encodeURIComponent(animeId);
+  const { data } = await client.get(watchUrl);
   const $ = cheerio.load(data);
-  const watchId = $('#watch-main').attr('data-id') || '';
-  if (watchId && $('#w-episodes a').length === 0) {
+
+  // HiAnime's current episode-list AJAX endpoint requires its internal numeric anime ID.
+  let internalAnimeId = '';
+  const syncData = $('#syncData').html();
+  if (syncData) {
     try {
-      const response = await client.get('/ajax/episode/list/' + encodeURIComponent(watchId), {
-        headers: { 'X-Requested-With': 'XMLHttpRequest', Referer: BASE + '/watch/' + animeId },
-      });
-      const html = response.data?.result || '';
-      if (html) $('#w-episodes').html(cheerio.load(html).root().html() || '');
-    } catch { /* use server-rendered episodes */ }
+      const parsed = JSON.parse(syncData);
+      internalAnimeId = String(parsed?.anime_id || parsed?.animeId || '');
+    } catch { /* fall back to page attributes */ }
   }
+  internalAnimeId ||= String($('#watch-main').attr('data-id') || '');
+
+  let episodeRoot = $('#w-episodes');
+  if (internalAnimeId) {
+    try {
+      const response = await client.get('/ajax/v2/episode/list/' + encodeURIComponent(internalAnimeId), {
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          Referer: absolute(watchUrl),
+        },
+      });
+      const html = response.data?.html || response.data?.result || '';
+      if (html) {
+        const episodeHtml = cheerio.load(html);
+        episodeRoot = episodeHtml('#episodes-page, #w-episodes, .detail-infor-content, body').first();
+        if (!episodeRoot.length) episodeRoot = episodeHtml.root();
+      }
+    } catch {
+      // Keep any server-rendered episode markup as a fallback.
+    }
+  }
+
   const episodes: HiAnimeEpisode[] = [];
-  $('#w-episodes a[href], #w-episodes a[data-num]').each((index, el) => {
+  episodeRoot.find('a.ssl-item, a[href*="?ep="], a[data-id], a[data-num]').each((index, el) => {
     const a = $(el);
     const href = a.attr('href') || '';
-    const episodePath = pathname(href);
-    const candidates = [
-      a.attr('data-number'),
-      a.attr('data-num'),
-      a.attr('data-episode'),
-      episodePath.match(/(?:ep|episode)[-_/]?(\d+(?:\.\d+)?)/i)?.[1],
-      a.attr('title'),
-      a.text(),
-    ].filter(Boolean);
-    let num = Number.NaN;
-    for (const candidate of candidates) {
-      const match = String(candidate).match(/(?:episode|ep)[\s._-]*(\d+(?:\.\d+)?)/i)
-        || String(candidate).match(/^\s*(\d+(?:\.\d+)?)\s*$/);
-      if (match) { num = Number.parseFloat(match[1]); break; }
-    }
-    // Keep the episode list usable even when the upstream markup omits numbering.
-    if (!Number.isFinite(num)) num = index + 1;
-    const numText = String(num);
-    const dataIds = a.attr('data-ids') || a.attr('data-id') || '';
-    const id = [animeId, dataIds, encodeURIComponent(episodePath)].join('::');
-    if (dataIds || episodePath) {
-      episodes.push({ id, num, title: a.attr('title') || 'Episode ' + numText });
-    }
+    const absoluteHref = absolute(href || watchUrl);
+    const parsedUrl = new URL(absoluteHref);
+    const epId = parsedUrl.searchParams.get('ep') || a.attr('data-id') || a.attr('data-ids') || '';
+    const episodePath = parsedUrl.pathname.replace(/^\\//, '');
+    const rawNum = a.attr('data-number') || a.attr('data-num') || a.attr('data-episode') || '';
+    const text = [rawNum, a.attr('title'), a.text()].filter(Boolean).join(' ');
+    const match = text.match(/(?:episode|ep)[\\s._-]*(\\d+(?:\\.\\d+)?)/i)
+      || text.match(/^\\s*(\\d+(?:\\.\\d+)?)\\s*$/);
+    const num = match ? Number.parseFloat(match[1]) : index + 1;
+    if (!epId) return;
+
+    const title = a.attr('title') || a.find('.ep-name').attr('title') || ('Episode ' + num);
+    const id = [animeId, epId, encodeURIComponent(episodePath)].join('::');
+    episodes.push({ id, num, title });
   });
-  const unique = Array.from(new Map(episodes.map(ep => [ep.id, ep])).values()).sort((a,b) => a.num-b.num);
+
+  const unique = Array.from(new Map(episodes.map(ep => [ep.id, ep])).values())
+    .sort((a, b) => a.num - b.num);
   if (unique.length) cacheSet(key, unique, 'episodes');
   return unique;
 }
