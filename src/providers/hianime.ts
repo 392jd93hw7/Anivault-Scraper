@@ -78,13 +78,16 @@ export async function getHiAnimeEpisodes(animeId: string): Promise<HiAnimeEpisod
   let episodeRoot = $('#w-episodes');
   if (internalAnimeId) {
     try {
-      const response = await client.get('/ajax/v2/episode/list/' + encodeURIComponent(internalAnimeId), {
+      // This HiAnime domain currently serves the legacy AJAX route.
+      // The v2 route returns 404 on hianime.at, even though it is used by
+      // some third-party mirrors and scraper implementations.
+      const response = await client.get('/ajax/episode/list/' + encodeURIComponent(internalAnimeId), {
         headers: {
           'X-Requested-With': 'XMLHttpRequest',
           Referer: absolute(watchUrl),
         },
       });
-      const html = response.data?.html || response.data?.result || '';
+      const html = response.data?.result || response.data?.html || '';
       if (html) {
         const episodeHtml = cheerio.load(html);
         episodeRoot = episodeHtml('#episodes-page, #w-episodes, .detail-infor-content, body').first();
