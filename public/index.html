@@ -1533,6 +1533,19 @@ function getHeavenId() {
   return document.getElementById('heavenIdInput')?.value.trim() || '';
 }
 
+function findProviderEpisode(value) {
+  const target = Number(value);
+  const byNumber = providerEpisodes.find(item =>
+    Number.isFinite(Number(item.num)) && Number(item.num) === target
+  );
+  if (byNumber) return byNumber;
+  const index = Math.trunc(target) - 1;
+  if (Number.isInteger(index) && index >= 0 && index < providerEpisodes.length) {
+    return providerEpisodes[index];
+  }
+  return selProviderEpisode || providerEpisodes[0] || null;
+}
+
 async function loadServers() {
   const ep = document.getElementById('epInput').value;
   const heavenId = getHeavenId();
@@ -1549,7 +1562,7 @@ async function loadServers() {
     const base = getBase();
     let serverUrl;
     if (selSource === 'hianime' || selSource === 'animepahe') {
-      const selectedEp = providerEpisodes.find(x => Number(x.num) === Number(ep));
+      const selectedEp = findProviderEpisode(ep);
       if (!selectedEp) throw new Error('Episode not found for selected source');
       selProviderEpisode = selectedEp;
       serverUrl = selSource === 'hianime'
@@ -1600,7 +1613,7 @@ async function loadServers() {
 
 function onEpChange() {
   if (selSource === 'hianime' || selSource === 'animepahe') {
-    selProviderEpisode = providerEpisodes.find(x => Number(x.num) === Number(document.getElementById('epInput').value)) || null;
+    selProviderEpisode = findProviderEpisode(document.getElementById('epInput').value);
   }
   resetServers();
   updateUrlPreview();
