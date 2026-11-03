@@ -46,26 +46,23 @@ export async function searchHiAnime(query: string): Promise<HiAnimeSearchResult[
 }
 
 export async function getHiAnimeEpisodes(animeId: string): Promise<HiAnimeEpisode[]> {
-  const key = 'hianime:eps:v2:' + animeId;
+  const key = 'hianime:eps:v3:' + animeId;
   const cached = cacheGet<HiAnimeEpisode[]>(key);
   if (cached) return cached;
 
   const watchUrl = '/watch/' + encodeURIComponent(animeId);
-  const { data } = await client.get(watchUrl);
-  const $ = cheerio.load(data);
+  const { data: pageHtml } = await client.get(watchUrl);
+  const $page = cheerio.load(pageHtml);
 
-  // HiAnime's current episode-list AJAX endpoint requires its internal numeric anime ID.
-  // Current HiAnime pages expose the numeric anime ID on #ani_detail.
-  // Its data-id is the *current episode ID*, so do not use that for the list endpoint.
+  // #ani_detail exposes the numeric anime ID. data-id is the current episode ID.
   let internalAnimeId = String(
-    $('#ani_detail').attr('data-anime-id')
-      || $('.anis-content[data-anime-id]').attr('data-anime-id')
+    $page('#ani_detail').attr('data-anime-id')
+      || $page('.anis-content[data-anime-id]').attr('data-anime-id')
       || ''
   );
 
-  // Older page variants may expose the ID in syncData or #watch-main.
   if (!internalAnimeId) {
-    const syncData = $('#syncData').text().trim();
+    const syncData = $page('#syncData').text().trim();
     if (syncData) {
       try {
         const parsed = JSON.parse(syncData);
@@ -73,47 +70,39 @@ export async function getHiAnimeEpisodes(animeId: string): Promise<HiAnimeEpisod
       } catch { /* continue to legacy attributes */ }
     }
   }
-  internalAnimeId ||= String($('#watch-main').attr('data-id') || '');
+  internalAnimeId ||= String($page('#watch-main').attr('data-id') || '');
 
-  let episodeRoot = $('#w-episodes');
+  let episodeHtml = '';
   if (internalAnimeId) {
-    try {
-      // This HiAnime domain currently serves the legacy AJAX route.
-      // The v2 route returns 404 on hianime.at, even though it is used by
-      // some third-party mirrors and scraper implementations.
-      const response = await client.get('/ajax/episode/list/' + encodeURIComponent(internalAnimeId), {
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-          Referer: absolute(watchUrl),
-        },
-      });
-      const html = response.data?.result || response.data?.html || '';
-      if (html) {
-        const episodeHtml = cheerio.load(html);
-        episodeRoot = episodeHtml('#episodes-page, #w-episodes, .detail-infor-content, body').first();
-        if (!episodeRoot.length) episodeRoot = episodeHtml.root();
-      }
-    } catch {
-      // Keep any server-rendered episode markup as a fallback.
+    const response = await client.get('/api/theme/episode/list/' + encodeURIComponent(internalAnimeId), {
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        Referer: absolute(watchUrl),
+        Accept: 'application/json',
+      },
+    });
+    if (response.data?.status && typeof response.data?.html === 'string') {
+      episodeHtml = response.data.html;
     }
   }
 
+  const $episodes = cheerio.load(episodeHtml || $page.html() || '');
   const episodes: HiAnimeEpisode[] = [];
-  episodeRoot.find('a.ssl-item, a[href*="?ep="], a[data-id], a[data-num]').each((index, el) => {
-    const a = $(el);
+
+  $episodes('a.ep-item, a.ssl-item, a[href*="?ep="]').each((index, el) => {
+    const a = $episodes(el);
     const href = a.attr('href') || '';
-    const absoluteHref = absolute(href || watchUrl);
-    const parsedUrl = new URL(absoluteHref);
-    const epId = parsedUrl.searchParams.get('ep') || a.attr('data-id') || a.attr('data-ids') || '';
-    const episodePath = parsedUrl.pathname.replace(/^\/+/, '');
+    const parsedUrl = new URL(absolute(href || watchUrl));
+    const epId = parsedUrl.searchParams.get('ep') || a.attr('data-id') || '';
     const rawNum = a.attr('data-number') || a.attr('data-num') || a.attr('data-episode') || '';
-    const text = [rawNum, a.attr('title'), a.text()].filter(Boolean).join(' ');
+    const text = [rawNum, a.attr('title'), a.find('.ep-name').text(), a.text()].filter(Boolean).join(' ');
     const match = text.match(/(?:episode|ep)[\s._-]*(\d+(?:\.\d+)?)/i)
       || text.match(/^\s*(\d+(?:\.\d+)?)\s*$/);
     const num = match ? Number.parseFloat(match[1]) : index + 1;
-    if (!epId) return;
+    if (!epId || !Number.isFinite(num)) return;
 
-    const title = a.attr('title') || a.find('.ep-name').attr('title') || ('Episode ' + num);
+    const title = a.attr('title') || a.find('.ep-name').attr('title') || a.find('.ep-name').text().trim() || ('Episode ' + num);
+    const episodePath = parsedUrl.pathname.replace(/^\/+/, '');
     const id = [animeId, epId, encodeURIComponent(episodePath)].join('::');
     episodes.push({ id, num, title });
   });
