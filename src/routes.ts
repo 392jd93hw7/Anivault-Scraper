@@ -13,12 +13,10 @@ import { getAnimeDetails, getEpisodes as getMalEpisodes, getEpisode as getMalEpi
 import { getSeasonNow, getTopBanners, getStreamingEpisodes, AniListStreamingEpisode, getAnimeImages as getAnilistAnimeImages } from './scrapers/anilist';
 import { getEpisodeThumbnail as getTmdbEpisodeThumbnail, getEpisodeData as getTmdbEpisodeData, getShowEpisodeCount as getTmdbEpisodeCount, getAnimeImages as getTmdbAnimeImages, extractSeasonHint } from './scrapers/tmdb';
 import { getKitsuAnimeId, getEpisodeThumbnail as getKitsuEpisodeThumbnail, getEpisodeData as getKitsuEpisodeData, getAnimeImages as getKitsuAnimeImages } from './scrapers/kitsu';
-import { searchHiAnime, getHiAnimeEpisodes, getHiAnimeServers, getHiAnimeStream } from './providers/hianime';
-import { searchAnimePahe, getAnimePaheEpisodes, getAnimePaheServers, getAnimePaheStream } from './providers/animepahe';
 
 const router = Router();
 
-const SOURCES = ['animeheaven', 'anikoto', 'desidub', 'megaplay', 'hianime', 'animepahe'] as const;
+const SOURCES = ['animeheaven', 'anikoto', 'desidub', 'megaplay'] as const;
 type Source = typeof SOURCES[number];
 
 function publicBase(req: Request): string {
@@ -111,9 +109,6 @@ async function fetchEpisodes(source: Source, siteIds: any, overrides: { heavenId
   const zoroId = siteIds.siteIds?.zoro as string | undefined;
   const heavenId = overrides.heavenId || (siteIds.siteIds?.animeheaven as string | undefined);
 
-  if (source === 'hianime' || source === 'animepahe') {
-    return { episodes: [], siteId: '', error: `${source} requires its provider anime ID; use /api/providers/${source}/... or pass providerAnimeId` };
-  }
   if (source === 'animeheaven') {
     if (!heavenId) return { episodes: [], siteId: '', error: 'Not indexed on AnimeHeaven' };
     return { episodes: await getHeavenEpisodes(heavenId), siteId: heavenId };
@@ -217,26 +212,6 @@ router.get('/episodes', async (req: Request, res: Response) => {
 router.get('/servers', async (req: Request, res: Response) => {
   const { anilistId, malId, ep, type = 'sub', source = 'anikoto', heavenId, providerAnimeId, episodeId, episodeSession } = req.query;
   if (!ep) return res.status(400).json({ error: 'Missing ?ep=' });
-  if (source === 'hianime') {
-    if (!episodeId) return res.status(400).json({ error: 'HiAnime requires ?episodeId= (from /api/providers/hianime/anime/:id/episodes)' });
-    try {
-      const servers = await getHiAnimeServers(String(episodeId));
-      const filtered = type === 'all' ? servers : servers.filter((s) => s.type === type);
-      return res.json({ source, episode: Number(ep), type, servers: filtered });
-    } catch (e: any) {
-      return res.status(502).json({ source, error: 'HiAnime server lookup failed', detail: e?.message || String(e) });
-    }
-  }
-  if (source === 'animepahe') {
-    if (!providerAnimeId || !episodeSession) return res.status(400).json({ error: 'AnimePahe requires ?providerAnimeId= and ?episodeSession= (from search/episodes)' });
-    try {
-      const servers = await getAnimePaheServers(String(providerAnimeId), String(episodeSession));
-      const filtered = type === 'all' ? servers : servers.filter((s) => s.type === type);
-      return res.json({ source, episode: Number(ep), type, servers: filtered });
-    } catch (e: any) {
-      return res.status(502).json({ source, error: 'AnimePahe server lookup failed', detail: e?.message || String(e) });
-    }
-  }
   if (!anilistId && !malId && !(source === 'animeheaven' && heavenId)) return res.status(400).json({ error: 'Provide ?anilistId= or ?malId=, or ?heavenId= for AnimeHeaven' });
   const epNum = parseInt(ep as string);
   if (isNaN(epNum)) return res.status(400).json({ error: '?ep must be a number' });
@@ -281,36 +256,6 @@ async function watchHandler(req: Request, res: Response) {
   const heavenOverride = req.query.heavenId as string | undefined;
 
   if (!SOURCES.includes(source as Source)) return res.status(400).json({ error: `source must be: ${SOURCES.join(', ')}` });
-  if (source === 'hianime' || source === 'animepahe') {
-    const sourceId = req.query.serverId as string | undefined;
-    if (!sourceId) return res.status(400).json({ error: 'Missing ?serverId= from the /api/servers response' });
-    try {
-      const stream = source === 'hianime'
-        ? await getHiAnimeStream(sourceId)
-        : await getAnimePaheStream(sourceId);
-      if (!stream) return res.status(404).json({ source, error: 'Provider did not return a playable embed' });
-      return res.json({
-        anilistId: null,
-        malId: null,
-        title: null,
-        episode: Number(ep),
-        type,
-        source,
-        server: stream.serverName,
-        embedUrl: stream.embedUrl,
-        m3u8: null,
-        hlsProxyUrl: null,
-        playbackMode: 'iframe',
-        iframeOnly: true,
-        subtitles: [],
-        intro: null,
-        outro: null,
-        note: 'Provider returned an embed URL; this source does not currently expose a direct HLS stream through this integration.',
-      });
-    } catch (e: any) {
-      return res.status(502).json({ source, error: 'Provider playback resolution failed', detail: e?.message || String(e) });
-    }
-  }
   const epNum = parseInt(ep);
   if (isNaN(epNum)) return res.status(400).json({ error: 'ep must be a number' });
   if (!['sub', 'dub', 'raw'].includes(type)) return res.status(400).json({ error: 'type must be: sub, dub, raw' });
@@ -676,15 +621,6 @@ router.get('/proxy/video', async (req: Request, res: Response) => {
 router.get('/watch', async (req: Request, res: Response) => {
   const { anilistId, malId, heavenId, ep, type = 'sub', source = 'anikoto', server, serverId } = req.query;
   if (!ep) return res.status(400).json({ error: 'Missing ?ep=' });
-  if (source === 'hianime' || source === 'animepahe') {
-    if (!serverId) return res.status(400).json({ error: 'Missing ?serverId=; use /api/servers first' });
-    req.params.source = String(source);
-    req.params.id = 'provider';
-    req.params.ep = String(ep);
-    req.params.type = String(type);
-    req.query.serverId = String(serverId);
-    return watchHandler(req, res);
-  }
   if (!anilistId && !malId && !(source === 'animeheaven' && heavenId)) return res.status(400).json({ error: 'Provide ?anilistId= or ?malId=, or ?heavenId= for AnimeHeaven' });
   const id = heavenId && source === 'animeheaven' ? String(heavenId) : anilistId ? String(anilistId) : `mal-${malId}`;
   req.params.source = String(source);
