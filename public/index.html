@@ -389,11 +389,6 @@ pre { padding:20px; overflow-x:auto; font-family:var(--mono); font-size:12px; li
         <div class="sic-row"><span class="sic-row-label">Servers</span><span class="sic-row-val">Mirror, VidMoly, StreamRuby, Abyss</span></div>
         <div class="sic-row"><span class="sic-row-label">Audio</span><span class="sic-row-val">Dub (Hindi/Muse/Official), Sub</span></div>
       </div>
-              <div class="sic-row"><span class="sic-row-label">Key</span><span class="sic-row-val">animepahe</span></div>
-        <div class="sic-row"><span class="sic-row-label">ID format</span><span class="sic-row-val">AnimePahe anime ID + episode session</span></div>
-        <div class="sic-row"><span class="sic-row-label">Servers</span><span class="sic-row-val">Kwik quality links</span></div>
-        <div class="sic-row"><span class="sic-row-label">Playback</span><span class="sic-row-val">Iframe embed URL</span></div>
-      </div>
     </div>
   </section>
 
@@ -1492,11 +1487,10 @@ function selectServer(chip) {
   document.querySelectorAll('.server-chip').forEach(c => c.classList.remove('active'));
   chip.classList.add('active');
   selServer = chip.dataset.server;
-  selProviderServer = chip.dataset.sourceId ? { sourceId: chip.dataset.sourceId, name: chip.dataset.serverName || chip.textContent } : null;
   updateUrlPreview();
 }
 function resetServers() {
-  selServer = ''; selProviderServer = null; providerServers = [];
+  selServer = ''; providerServers = [];
   document.getElementById('serverChips').innerHTML =
     '<div class="server-chip auto active" data-server="" onclick="selectServer(this)">Auto</div>';
 }
@@ -1611,7 +1605,7 @@ async function pickAnime(r) {
   document.getElementById('selEps').textContent = (r.episodes || '?') + ' eps';
   document.getElementById('selFormat').textContent = r.format || '';
 
-  providerEpisodes = []; providerServers = []; selProviderEpisode = null; selProviderServer = null;
+  providerEpisodes = []; providerServers = [];
   resetServers();
   updateUrlPreview();
   if (document.getElementById('epInput').value) loadServers();
