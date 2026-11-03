@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getZokoAnimeServers, getZokoAnimeStream } from './zokoanime';
 import { getSiteIds } from '../utils/mapper';
+import { proxiedHlsUrl, proxiedSubtitleUrl } from '../routes';
 
 const router = Router();
 
@@ -42,8 +43,19 @@ router.get('/zokoanime/watch', async (req: Request, res: Response) => {
     if (!stream) return res.status(400).json({ error: 'Invalid ZokoAnime server ID' });
     const [malId, episode, type] = sourceId.split('::');
     return res.json({
-      source: 'zokoanime', malId: Number(malId), episode: Number(episode), type,
-      ...stream, iframeOnly: false,
+      source: 'zokoanime',
+      malId: Number(malId),
+      episode: Number(episode),
+      type,
+      ...stream,
+      // The shared HLS proxy rewrites every nested playlist/segment URI and
+      // forwards ZokoAnime's required Referer and Origin headers.
+      hlsProxyUrl: proxiedHlsUrl(req, stream.m3u8, stream.embedUrl),
+      subtitles: stream.subtitles.map((track) => ({
+        ...track,
+        url: proxiedSubtitleUrl(req, track.src, stream.embedUrl),
+      })),
+      iframeOnly: false,
     });
   } catch (error) {
     return res.status(502).json({ source: 'zokoanime', error: safeError(error) });
