@@ -177,19 +177,3 @@ export async function getHiAnimeStream(sourceId: string): Promise<{ embedUrl: st
     serverName: 'HiAnime',
   };
 }
-
-
-/** Return the provider embed URL without attempting to bypass protected playback controls. */
-export async function getHiAnimeStream(sourceId: string): Promise<{ embedUrl: string; playbackMode: 'iframe'; serverName: string } | null> {
-  const [linkId, svId] = sourceId.split('::');
-  if (!linkId) return null;
-  const { data } = await client.get('/ajax/server', {
-    params: { get: linkId, ...(svId ? { sv: svId } : {}) },
-    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-  });
-  const raw = data?.result?.url;
-  if (typeof raw !== 'string') return null;
-  const embedUrl = new URL(raw, BASE);
-  if (!['http:', 'https:'].includes(embedUrl.protocol)) return null;
-  return { embedUrl: embedUrl.toString(), playbackMode: 'iframe', serverName: 'HiAnime' };
-}
