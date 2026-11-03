@@ -288,3 +288,15 @@ Optional environment variables:
 - `HIANIME_BASE_URL` (default: `https://hianime.at`)
 - `ANIMEPAHE_BASE_URL` (default: `https://animepahe.ch`)
 
+
+
+### ZokoAnime direct-ID provider
+
+ZokoAnime is available as a direct MAL-ID/episode resolver. It does not currently expose a verified search or episode-catalogue adapter here; obtain the MAL ID and episode number from your metadata/episode source first.
+
+| Action | Endpoint |
+|---|---|
+| List SUB/DUB choices | `GET /api/providers/zokoanime/servers?malId=16498&ep=1` |
+| Resolve selected choice | `GET /api/providers/zokoanime/watch?serverId={server.sourceId}` |
+
+The adapter constructs the observed URL pattern `https://zokoanime.video/stream/mal/{malId}/{episode}/{sub|dub}` and returns it as an iframe embed. This URL pattern was observed in a HiAnime server hash; each generated URL still needs live playback verification. Direct HLS extraction is not claimed.
