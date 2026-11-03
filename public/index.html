@@ -473,7 +473,7 @@ pre { padding:20px; overflow-x:auto; font-family:var(--mono); font-size:12px; li
 
         <!-- SOURCE -->
         <label class="field-label">Source</label>
-        <div class="source-grid" style="margin-bottom:20px;grid-template-columns:repeat(3,1fr);">
+        <div class="source-grid" style="margin-bottom:20px;grid-template-columns:repeat(5,1fr);">
           <div class="source-card active" onclick="setSource('anikoto',this)" id="src-anikoto">
             <div class="source-icon">🦊</div>
             <span class="source-name">Anikoto</span>
@@ -493,6 +493,11 @@ pre { padding:20px; overflow-x:auto; font-family:var(--mono); font-size:12px; li
             <div class="source-icon">▶️</div>
             <span class="source-name">MegaPlay Direct</span>
             <span class="source-url">megaplay.buzz</span>
+          </div>
+          <div class="source-card" onclick="setSource('zokoanime',this)" id="src-zokoanime">
+            <div class="source-icon">⚡</div>
+            <span class="source-name">ZokoAnime</span>
+            <span class="source-url">zokoanime.video</span>
           </div>
         </div>
         <div id="animeHeavenVercelNotice" class="hosting-warning" role="status" style="display:none">
@@ -1449,6 +1454,10 @@ function copyResult() {
 
 // ── SEGMENT CONTROLS
 function setType(t, btn) {
+  if (selSource === 'zokoanime' && t === 'raw') {
+    alert('ZokoAnime supports SUB and DUB only.');
+    return;
+  }
   selType = t;
   btn.closest('.seg-control').querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
@@ -1470,6 +1479,10 @@ function setSource(s, card) {
   if (selAnime && document.getElementById('epInput').value) loadServers();
 }
 function setEndpoint(e, btn) {
+  if (selSource === 'zokoanime' && e === 'episodes') {
+    alert('ZokoAnime currently provides Servers and Watch endpoints only.');
+    return;
+  }
   selEndpoint = e;
   btn.closest('.seg-control').querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
@@ -1486,7 +1499,7 @@ function setTab(tab, btn) {
 function selectServer(chip) {
   document.querySelectorAll('.server-chip').forEach(c => c.classList.remove('active'));
   chip.classList.add('active');
-  selServer = chip.dataset.server;
+  selServer = chip.dataset.serverId || chip.dataset.server;
   updateUrlPreview();
 }
 function resetServers() {
@@ -1514,25 +1527,39 @@ async function loadServers() {
   try {
     const base = getBase();
     let serverUrl;
+
+    if (selSource === 'zokoanime') {
+      if (selType === 'raw') throw new Error('ZokoAnime supports SUB and DUB only.');
+      const idParam = selAnime.id
+        ? `anilistId=${encodeURIComponent(selAnime.id)}`
+        : `malId=${encodeURIComponent(selAnime.malId)}`;
+      serverUrl = `${base}/api/providers/zokoanime/servers?${idParam}&ep=${encodeURIComponent(ep)}`;
+    } else if (selSource === 'animeheaven' && heavenId) {
+      serverUrl = `${base}/api/servers?source=animeheaven&heavenId=${encodeURIComponent(heavenId)}&ep=${ep}&type=${selType}`;
     } else {
-      serverUrl = selSource === 'animeheaven' && heavenId
-        ? `${base}/api/servers?source=animeheaven&heavenId=${encodeURIComponent(heavenId)}&ep=${ep}&type=${selType}`
-        : selAnime.id
-          ? `${base}/api/servers?anilistId=${selAnime.id}&ep=${ep}&type=${selType}&source=${selSource}`
-          : `${base}/api/servers?malId=${selAnime.malId}&ep=${ep}&type=${selType}&source=${selSource}`;
+      serverUrl = selAnime.id
+        ? `${base}/api/servers?anilistId=${selAnime.id}&ep=${ep}&type=${selType}&source=${selSource}`
+        : `${base}/api/servers?malId=${selAnime.malId}&ep=${ep}&type=${selType}&source=${selSource}`;
     }
+
     const res = await fetch(serverUrl);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Server lookup failed');
-    const servers = data.servers || [];
+
+    const servers = (data.servers || []).filter(server =>
+      selSource !== 'zokoanime' || !server.type || server.type === selType
+    );
+
     servers.forEach(server => {
       const chip = document.createElement('div');
       chip.className = 'server-chip';
-      chip.dataset.server = server.name;
-      chip.textContent = server.name + (server.type && server.type !== selType ? ` (${server.type})` : '');
+      chip.dataset.server = server.name || 'Server';
+      if (server.sourceId) chip.dataset.serverId = server.sourceId;
+      chip.textContent = server.name + (server.type ? ` (${server.type.toUpperCase()})` : '');
       chip.onclick = () => selectServer(chip);
       chips.appendChild(chip);
     });
+
     if (!servers.length) {
       const msg = document.createElement('span');
       msg.style.cssText = 'font-family:var(--mono);font-size:11px;color:var(--muted)';
@@ -1544,10 +1571,10 @@ async function loadServers() {
     msg.style.cssText = 'font-family:var(--mono);font-size:11px;color:var(--accent)';
     msg.textContent = e.message || 'Could not load servers';
     chips.appendChild(msg);
+  } finally {
+    label.style.display = 'none';
   }
-  label.style.display = 'none';
 }
-
 function onEpChange() {
   resetServers();
   updateUrlPreview();
@@ -1624,6 +1651,20 @@ function buildUrl() {
   const base = getBase();
   const ep = document.getElementById('epInput').value || '1';
   const heavenId = getHeavenId();
+
+  if (selSource === 'zokoanime') {
+    if (!selAnime) return null;
+    if (selEndpoint === 'episodes') return null;
+    const idParam = selAnime.id
+      ? `anilistId=${encodeURIComponent(selAnime.id)}`
+      : `malId=${encodeURIComponent(selAnime.malId)}`;
+    if (selEndpoint === 'servers') {
+      return `${base}/api/providers/zokoanime/servers?${idParam}&ep=${encodeURIComponent(ep)}`;
+    }
+    const serverId = selServer || `${selAnime.malId || ''}::${ep}::${selType}`;
+    return `${base}/api/providers/zokoanime/watch?serverId=${encodeURIComponent(serverId)}`;
+  }
+
   if (selSource === 'animeheaven' && heavenId) {
     if (selEndpoint === 'watch') return `${base}/api/watch?source=animeheaven&heavenId=${encodeURIComponent(heavenId)}&ep=${ep}&type=${selType}`;
     if (selEndpoint === 'servers') return `${base}/api/servers?source=animeheaven&heavenId=${encodeURIComponent(heavenId)}&ep=${ep}&type=${selType}`;
@@ -1645,7 +1686,6 @@ function buildUrl() {
     : `${base}/api/episodes?malId=${selAnime.malId}&source=${selSource}`;
   return null;
 }
-
 function updateUrlPreview() {
   const url = buildUrl();
   const el = document.getElementById('urlPreview');
