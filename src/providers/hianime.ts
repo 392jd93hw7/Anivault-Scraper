@@ -105,11 +105,11 @@ export async function getHiAnimeEpisodes(animeId: string): Promise<HiAnimeEpisod
     const absoluteHref = absolute(href || watchUrl);
     const parsedUrl = new URL(absoluteHref);
     const epId = parsedUrl.searchParams.get('ep') || a.attr('data-id') || a.attr('data-ids') || '';
-    const episodePath = parsedUrl.pathname.replace(/^\\//, '');
+    const episodePath = parsedUrl.pathname.replace(/^\/+/, '');
     const rawNum = a.attr('data-number') || a.attr('data-num') || a.attr('data-episode') || '';
     const text = [rawNum, a.attr('title'), a.text()].filter(Boolean).join(' ');
-    const match = text.match(/(?:episode|ep)[\\s._-]*(\\d+(?:\\.\\d+)?)/i)
-      || text.match(/^\\s*(\\d+(?:\\.\\d+)?)\\s*$/);
+    const match = text.match(/(?:episode|ep)[\s._-]*(\d+(?:\.\d+)?)/i)
+      || text.match(/^\s*(\d+(?:\.\d+)?)\s*$/);
     const num = match ? Number.parseFloat(match[1]) : index + 1;
     if (!epId) return;
 
