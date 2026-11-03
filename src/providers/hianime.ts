@@ -114,40 +114,70 @@ export async function getHiAnimeEpisodes(animeId: string): Promise<HiAnimeEpisod
 }
 
 export async function getHiAnimeServers(episodeId: string): Promise<HiAnimeServer[]> {
-  const key = 'hianime:servers:' + episodeId;
+  const key = 'hianime:servers:v2:' + episodeId;
   const cached = cacheGet<HiAnimeServer[]>(key);
   if (cached) return cached;
-  const [animeId, dataIds, encodedPath] = episodeId.split('::');
-  let ids = dataIds;
-  if (!ids) {
-    if (!animeId || !encodedPath) return [];
-    const { data } = await client.get('/watch/' + encodeURIComponent(animeId));
-    const $ = cheerio.load(data);
-    const targetPath = decodeURIComponent(encodedPath);
-    ids = $('#w-episodes a').filter((_, el) => pathname($(el).attr('href') || '') === targetPath)
-      .first().attr('data-ids') || '';
-  }
-  if (!ids) return [];
-  const { data } = await client.get('/ajax/server/list', {
-    params: { servers: ids },
-    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+
+  // Episode IDs are encoded as animeSlug::episodeId::watchPath.
+  const [, upstreamEpisodeId] = episodeId.split('::');
+  if (!upstreamEpisodeId) return [];
+
+  const watchUrl = '/watch/' + encodeURIComponent(episodeId.split('::')[0]) + '?ep=' + encodeURIComponent(upstreamEpisodeId);
+  const { data } = await client.get('/api/theme/episode/servers', {
+    params: { episodeId: upstreamEpisodeId },
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      Referer: absolute(watchUrl),
+      Accept: 'application/json',
+    },
   });
-  const $ = cheerio.load(data?.result || '');
+
+  if (!data?.status || typeof data?.html !== 'string') return [];
+
+  const $ = cheerio.load(data.html);
   const servers: HiAnimeServer[] = [];
-  $('.server, li').each((_, el) => {
+  $('.server-item[data-hash]').each((_, el) => {
     const item = $(el);
-    const linkId = item.attr('data-link-id');
-    if (!linkId) return;
-    const label = item.closest('.type').find('label, .name').text().toLowerCase();
-    servers.push({
-      name: item.text().trim() || 'HiAnime server',
-      sourceId: [linkId, item.attr('data-sv-id') || ''].join('::'),
-      type: label.includes('dub') ? 'dub' : label.includes('raw') ? 'raw' : 'sub',
-    });
+    const hash = String(item.attr('data-hash') || '').trim();
+    if (!hash) return;
+
+    const rawType = String(item.attr('data-type') || '').toLowerCase();
+    const type: HiAnimeServer['type'] = rawType === 'dub' ? 'dub' : rawType === 'raw' ? 'raw' : 'sub';
+    const name = String(item.attr('data-server-name') || item.text()).trim() || 'HiAnime server';
+    servers.push({ name, sourceId: hash, type });
   });
-  cacheSet(key, servers, 'episodes');
-  return servers;
+
+  const unique = Array.from(new Map(servers.map(server => [server.sourceId, server])).values());
+  cacheSet(key, unique, 'episodes');
+  return unique;
 }
+
+/** Decode HiAnime's server hash and return the provider's iframe URL. */
+export async function getHiAnimeStream(sourceId: string): Promise<{ embedUrl: string; playbackMode: 'iframe'; serverName: string } | null> {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(sourceId)) return null;
+
+  let raw: string;
+  try {
+    raw = Buffer.from(sourceId, 'base64').toString('utf8');
+  } catch {
+    return null;
+  }
+
+  let embedUrl: URL;
+  try {
+    embedUrl = new URL(raw);
+  } catch {
+    return null;
+  }
+
+  if (!['http:', 'https:'].includes(embedUrl.protocol)) return null;
+  return {
+    embedUrl: embedUrl.toString(),
+    playbackMode: 'iframe',
+    serverName: 'HiAnime',
+  };
+}
+
 
 /** Return the provider embed URL without attempting to bypass protected playback controls. */
 export async function getHiAnimeStream(sourceId: string): Promise<{ embedUrl: string; playbackMode: 'iframe'; serverName: string } | null> {
