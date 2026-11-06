@@ -27,10 +27,6 @@ export interface HiAnimeStream {
   subtitles: { url: string; lang: string; default: boolean }[];
 }
 
-function absoluteUrl(value: string, base = BASE): string {
-  return new URL(value, base).toString();
-}
-
 function decodeXorPayload(value: string): any {
   const input = Buffer.from(value, 'base64');
   if (!input.length) throw new Error('Empty HiAnime player payload');
@@ -157,7 +153,6 @@ export async function getHiAnimeStream(sourceId: string): Promise<HiAnimeStream 
   try {
     const decoded = JSON.parse(Buffer.from(sourceId, 'base64url').toString('utf8'));
     const hash = String(decoded?.hash ?? '');
-    const type = String(decoded?.type ?? 'sub');
     if (!hash) return null;
 
     const embedUrl = safeHttpUrl(Buffer.from(hash, 'base64').toString('utf8'));
@@ -176,7 +171,8 @@ export async function getHiAnimeStream(sourceId: string): Promise<HiAnimeStream 
     }
 
     let m3u8 = safeHttpUrl(payload?.src ?? payload?.sources?.[0]?.file ?? payload?.file);
-    let subtitles = (payload?.tracks ?? payload?.tracks?.captions ?? [])
+    const payloadTracks = Array.isArray(payload?.tracks) ? payload.tracks : Array.isArray(payload?.tracks?.captions) ? payload.tracks.captions : [];
+    let subtitles = payloadTracks
       .filter((track: any) => track?.file && /^https?:\/\//i.test(track.file))
       .map((track: any) => ({ url: track.file, lang: track.label ?? 'Unknown', default: Boolean(track.default) }));
 
@@ -185,7 +181,7 @@ export async function getHiAnimeStream(sourceId: string): Promise<HiAnimeStream 
       const resolved = await resolveEmbed(embedUrl).catch(() => null);
       if (resolved?.m3u8) {
         m3u8 = safeHttpUrl(resolved.m3u8);
-        subtitles = resolved.subtitles ?? [];
+        subtitles = (resolved.subtitles ?? []).map((track: any) => ({ url: track.url, lang: track.lang ?? 'Unknown', default: Boolean(track.default) }));
       }
     }
     if (!m3u8) return null;
