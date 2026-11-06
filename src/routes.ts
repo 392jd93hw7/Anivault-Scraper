@@ -9,6 +9,7 @@ import { getHeavenEpisodes, getHeavenServers, getHeavenStream } from './scrapers
 import { getAnikotoEpisodes, getAnikotoServers, getAnikotoEmbedUrl } from './scrapers/anikoto';
 import { getMegaPlayStream } from './scrapers/megaplay';
 import { getDesidubEpisodes, getDesidubServers, getDesidubStream } from './scrapers/desidub';
+import { getHiAnimeEpisodes, getHiAnimeServers, getHiAnimeStream } from './scrapers/hianime';
 import { getAnimeDetails, getEpisodes as getMalEpisodes, getEpisode as getMalEpisode, getAllEpisodes as getAllMalEpisodes, getCharacters, getCharacterDetails, getAnimePictures, getCharacterPictures, getAnimeThemes, getAnimeVideos, getRecommendations, searchAnime, getExternalLinks, getStreamingPlatforms, debugSearchHtml, MalEpisode } from './scrapers/mal';
 import { getSeasonNow, getTopBanners, getStreamingEpisodes, AniListStreamingEpisode, getAnimeImages as getAnilistAnimeImages } from './scrapers/anilist';
 import { getEpisodeThumbnail as getTmdbEpisodeThumbnail, getEpisodeData as getTmdbEpisodeData, getShowEpisodeCount as getTmdbEpisodeCount, getAnimeImages as getTmdbAnimeImages, extractSeasonHint } from './scrapers/tmdb';
@@ -16,7 +17,7 @@ import { getKitsuAnimeId, getEpisodeThumbnail as getKitsuEpisodeThumbnail, getEp
 
 const router = Router();
 
-const SOURCES = ['animeheaven', 'anikoto', 'desidub', 'megaplay'] as const;
+const SOURCES = ['animeheaven', 'anikoto', 'desidub', 'megaplay', 'hianime'] as const;
 type Source = typeof SOURCES[number];
 
 function publicBase(req: Request): string {
@@ -122,6 +123,11 @@ async function fetchEpisodes(source: Source, siteIds: any, overrides: { heavenId
     const slug = siteIds.siteIds?.desidub as string | undefined;
     if (!slug) return { episodes: [], siteId: '', error: 'Not indexed on DesiDub' };
     return { episodes: await getDesidubEpisodes(slug), siteId: slug };
+  }
+  if (source === 'hianime') {
+    const animeId = siteIds.siteIds?.hianime as string | undefined;
+    if (!animeId) return { episodes: [], siteId: '', error: 'Not indexed on HiAnime' };
+    return { episodes: await getHiAnimeEpisodes(animeId), siteId: animeId };
   }
   if (source === 'megaplay') {
     const malId = Number(siteIds.malId);
@@ -232,6 +238,7 @@ router.get('/servers', async (req: Request, res: Response) => {
     if (source === 'animeheaven') allServers = await getHeavenServers(episode.id, `https://animeheaven.me/anime.php?${epResult.siteId}`);
     if (source === 'anikoto') allServers = await getAnikotoServers(episode.id);
     if (source === 'desidub') allServers = await getDesidubServers(episode.id);
+    if (source === 'hianime') allServers = await getHiAnimeServers(episode.id);
     if (source === 'megaplay') allServers = [{ name: 'MegaPlay Direct', sourceId: String(epNum), type: type === 'dub' ? 'dub' : 'sub' }];
 
     const filtered = type === 'all' ? allServers : allServers.filter((s: any) => s.type === type);
@@ -304,6 +311,7 @@ async function watchHandler(req: Request, res: Response) {
     if (source === 'animeheaven') allServers = await getHeavenServers(episode.id);
     if (source === 'anikoto') allServers = await getAnikotoServers(episode.id);
     if (source === 'desidub') allServers = await getDesidubServers(episode.id);
+    if (source === 'hianime') allServers = await getHiAnimeServers(episode.id);
 
     const filtered = type === 'all'
       ? allServers
@@ -336,6 +344,7 @@ async function watchHandler(req: Request, res: Response) {
       if (source === 'animeheaven') raw = await getHeavenStream(server.sourceId, server.referer);
       if (source === 'anikoto') raw = await getAnikotoEmbedUrl(server.sourceId);
       if (source === 'desidub') raw = await getDesidubStream(server.sourceId);
+      if (source === 'hianime') raw = await getHiAnimeStream(server.sourceId);
       if (raw) { embedResult = raw; usedServer = server.name; break; }
     }
     if (!embedResult) {
@@ -365,6 +374,31 @@ async function watchHandler(req: Request, res: Response) {
         iframeOnly: false,
         subtitles: [],
         note: 'AnimeHeaven currently exposes direct MP4 sources, not m3u8/HLS.',
+      });
+    }
+
+    if (source === 'hianime') {
+      return res.json({
+        anilistId: siteIds.anilistId,
+        malId: siteIds.malId,
+        title: siteIds.title,
+        episode: epNum,
+        type,
+        source,
+        server: usedServer,
+        availableServers: filtered.map((s: any) => s.name),
+        embedUrl: embedResult.embedUrl,
+        m3u8: embedResult.m3u8 ?? null,
+        hlsProxyUrl: embedResult.m3u8 ? proxiedHlsUrl(req, embedResult.m3u8, embedResult.referer) : null,
+        playbackMode: embedResult.m3u8 ? 'hls' : 'iframe',
+        iframeOnly: !embedResult.m3u8,
+        subtitles: (embedResult.subtitles ?? []).map((s: any) => ({
+          ...s,
+          url: proxiedSubtitleUrl(req, s.url, embedResult.referer),
+        })),
+        intro: null,
+        outro: null,
+        note: embedResult.m3u8 ? null : 'No m3u8 extracted — use embedUrl in an iframe.',
       });
     }
 
