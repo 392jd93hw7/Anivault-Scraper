@@ -4,6 +4,7 @@ import { cacheGet, cacheSet } from './cache';
 import { findAnimeHeavenId } from '../scrapers/animeheaven';
 import { findAnikotoSlug } from '../scrapers/anikoto';
 import { findDesidubSlug } from '../scrapers/desidub';
+import { findHiAnimeId } from '../scrapers/hianime';
 import { getAnimeDetails } from '../scrapers/mal';
 
 export interface SiteIds {
@@ -22,6 +23,7 @@ export interface SiteIds {
     anidao?: string;
     anikoto?: string;
     desidub?: string;
+    hianime?: string;
   };
 }
 
@@ -54,6 +56,20 @@ async function enrichAnikoto(result: SiteIds, altTitle?: string | null): Promise
   if (altTitle && altTitle !== result.title) {
     const altSlug = await findAnikotoSlug(altTitle).catch(() => null);
     if (altSlug) result.siteIds.anikoto = altSlug;
+  }
+  return result;
+}
+
+async function enrichHiAnime(result: SiteIds, altTitle?: string | null): Promise<SiteIds> {
+  if (result.siteIds.hianime || result.title === 'Unknown') return result;
+  const id = await findHiAnimeId(result.title).catch(() => null);
+  if (id) {
+    result.siteIds.hianime = id;
+    return result;
+  }
+  if (altTitle && altTitle !== result.title) {
+    const altId = await findHiAnimeId(altTitle).catch(() => null);
+    if (altId) result.siteIds.hianime = altId;
   }
   return result;
 }
@@ -117,8 +133,8 @@ export async function getSiteIds(anilistId: number): Promise<SiteIds | null> {
     const wasMissingAnimeHeaven = !cached.siteIds.animeheaven;
     const wasMissingAnikoto = !cached.siteIds.anikoto;
     const wasMissingDesidub = !cached.siteIds.desidub;
-    const enriched = await enrichDesidub(await enrichAnikoto(await enrichAnimeHeaven(cached, cached.altTitle), cached.altTitle), cached.altTitle);
-    if ((wasMissingAnimeHeaven && enriched.siteIds.animeheaven) || (wasMissingAnikoto && enriched.siteIds.anikoto) || (wasMissingDesidub && enriched.siteIds.desidub)) {
+    const enriched = await enrichHiAnime(await enrichDesidub(await enrichAnikoto(await enrichAnimeHeaven(cached, cached.altTitle), cached.altTitle), cached.altTitle), cached.altTitle);
+    if ((wasMissingAnimeHeaven && enriched.siteIds.animeheaven) || (wasMissingAnikoto && enriched.siteIds.anikoto) || (wasMissingDesidub && enriched.siteIds.desidub) || !cached.siteIds.hianime && enriched.siteIds.hianime) {
       cacheSet(cacheKey, enriched);
     }
     return enriched;
@@ -155,6 +171,7 @@ export async function getSiteIds(anilistId: number): Promise<SiteIds | null> {
   await enrichAnimeHeaven(result, result.altTitle);
   await enrichAnikoto(result, result.altTitle);
   await enrichDesidub(result, result.altTitle);
+  await enrichHiAnime(result, result.altTitle);
 
   // If still no zoro ID, try a slug guess (title-anilistId format common on HiAnime clones)
   // This is a heuristic and may not always work
@@ -208,6 +225,7 @@ export async function getSiteIdsByMal(malId: number): Promise<SiteIds | null> {
   await enrichAnimeHeaven(result, result.altTitle);
   await enrichAnikoto(result, result.altTitle);
   await enrichDesidub(result, result.altTitle);
+  await enrichHiAnime(result, result.altTitle);
 
   cacheSet(cacheKey, result);
   return result;
