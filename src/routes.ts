@@ -8,6 +8,7 @@ import { resolveEmbed } from './resolvers/megacloud';
 import { getHeavenEpisodes, getHeavenServers, getHeavenStream } from './scrapers/animeheaven';
 import { getAnikotoEpisodes, getAnikotoServers, getAnikotoEmbedUrl } from './scrapers/anikoto';
 import { getMegaPlayStream } from './scrapers/megaplay';
+import { getZokoAnimeEpisodes, getZokoAnimeStream } from './scrapers/zokoanime';
 import { getDesidubEpisodes, getDesidubServers, getDesidubStream } from './scrapers/desidub';
 import { getAnimeDetails, getEpisodes as getMalEpisodes, getEpisode as getMalEpisode, getAllEpisodes as getAllMalEpisodes, getCharacters, getCharacterDetails, getAnimePictures, getCharacterPictures, getAnimeThemes, getAnimeVideos, getRecommendations, searchAnime, getExternalLinks, getStreamingPlatforms, debugSearchHtml, MalEpisode } from './scrapers/mal';
 import { getSeasonNow, getTopBanners, getStreamingEpisodes, AniListStreamingEpisode, getAnimeImages as getAnilistAnimeImages } from './scrapers/anilist';
@@ -16,7 +17,7 @@ import { getKitsuAnimeId, getEpisodeThumbnail as getKitsuEpisodeThumbnail, getEp
 
 const router = Router();
 
-const SOURCES = ['animeheaven', 'anikoto', 'desidub', 'megaplay'] as const;
+const SOURCES = ['animeheaven', 'anikoto', 'desidub', 'megaplay', 'zokoanime'] as const;
 type Source = typeof SOURCES[number];
 
 function publicBase(req: Request): string {
@@ -122,6 +123,12 @@ async function fetchEpisodes(source: Source, siteIds: any, overrides: { heavenId
     const slug = siteIds.siteIds?.desidub as string | undefined;
     if (!slug) return { episodes: [], siteId: '', error: 'Not indexed on DesiDub' };
     return { episodes: await getDesidubEpisodes(slug), siteId: slug };
+  }
+  if (source === 'zokoanime') {
+    const malId = Number(siteIds.malId);
+    if (!Number.isInteger(malId) || malId <= 0) return { episodes: [], siteId: '', error: 'ZokoAnime requires a valid MAL ID' };
+    const episodes = await getZokoAnimeEpisodes(malId);
+    return { episodes, siteId: String(malId), error: episodes.length ? undefined : 'Could not determine ZokoAnime episode count' };
   }
   if (source === 'megaplay') {
     const malId = Number(siteIds.malId);
@@ -232,7 +239,9 @@ router.get('/servers', async (req: Request, res: Response) => {
     if (source === 'animeheaven') allServers = await getHeavenServers(episode.id, `https://animeheaven.me/anime.php?${epResult.siteId}`);
     if (source === 'anikoto') allServers = await getAnikotoServers(episode.id);
     if (source === 'desidub') allServers = await getDesidubServers(episode.id);
+    if (source === 'zokoanime') allServers = [{ name: 'ZokoAnime', sourceId: String(epNum), type: type === 'dub' ? 'dub' : 'sub' }];
     if (source === 'megaplay') allServers = [{ name: 'MegaPlay Direct', sourceId: String(epNum), type: type === 'dub' ? 'dub' : 'sub' }];
+    if (source === 'zokoanime') allServers = [{ name: 'ZokoAnime', sourceId: String(epNum), type: type === 'dub' ? 'dub' : 'sub' }];
 
     const filtered = type === 'all' ? allServers : allServers.filter((s: any) => s.type === type);
     return res.json({
@@ -269,6 +278,35 @@ async function watchHandler(req: Request, res: Response) {
       ? { anilistId: null, malId: null, title: null, siteIds: { animeheaven: id } }
       : await resolveSiteIds(anilistId, malId);
     if (!siteIds) return res.status(404).json({ error: 'Could not resolve anime' });
+
+    if (source === 'zokoanime') {
+      const track = type === 'dub' ? 'dub' : 'sub';
+      const stream = await getZokoAnimeStream(siteIds.malId, epNum, track);
+      if (!stream) return res.status(502).json({ error: `ZokoAnime failed to resolve a stream for episode ${epNum}`, source: 'zokoanime' });
+      const m3u8 = stream.m3u8;
+      return res.json({
+        anilistId: siteIds.anilistId,
+        malId: siteIds.malId,
+        title: siteIds.title,
+        episode: epNum,
+        type: track,
+        source,
+        server: 'ZokoAnime',
+        availableServers: ['ZokoAnime'],
+        embedUrl: stream.embedUrl,
+        m3u8,
+        hlsProxyUrl: m3u8 ? proxiedHlsUrl(req, m3u8, stream.referer) : null,
+        playbackMode: m3u8 ? 'hls' : 'iframe',
+        iframeOnly: !m3u8,
+        subtitles: stream.subtitles.map((subtitle) => ({
+          ...subtitle,
+          url: proxiedSubtitleUrl(req, subtitle.url, stream.referer),
+        })),
+        intro: null,
+        outro: null,
+        note: m3u8 ? null : 'ZokoAnime did not expose a direct HLS URL; use embedUrl in an iframe.',
+      });
+    }
 
     if (source === 'megaplay') {
       const stream = await getMegaPlayStream(siteIds.malId, siteIds.anilistId, epNum, type as 'sub' | 'dub');
