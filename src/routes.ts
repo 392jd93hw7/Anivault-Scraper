@@ -127,7 +127,7 @@ async function fetchEpisodes(source: Source, siteIds: any, overrides: { heavenId
   if (source === 'zokoanime') {
     const malId = Number(siteIds.malId);
     if (!Number.isInteger(malId) || malId <= 0) return { episodes: [], siteId: '', error: 'ZokoAnime requires a valid MAL ID' };
-    const episodes = await getZokoAnimeEpisodes(malId, siteIds.title);
+    const episodes = await getZokoAnimeEpisodes(malId);
     return { episodes, siteId: String(malId), error: episodes.length ? undefined : 'Could not determine ZokoAnime episode count' };
   }
   if (source === 'megaplay') {
