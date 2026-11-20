@@ -241,7 +241,6 @@ router.get('/servers', async (req: Request, res: Response) => {
     if (source === 'desidub') allServers = await getDesidubServers(episode.id);
     if (source === 'zokoanime') allServers = [{ name: 'ZokoAnime', sourceId: String(epNum), type: type === 'dub' ? 'dub' : 'sub' }];
     if (source === 'megaplay') allServers = [{ name: 'MegaPlay Direct', sourceId: String(epNum), type: type === 'dub' ? 'dub' : 'sub' }];
-    if (source === 'zokoanime') allServers = [{ name: 'ZokoAnime', sourceId: String(epNum), type: type === 'dub' ? 'dub' : 'sub' }];
 
     const filtered = type === 'all' ? allServers : allServers.filter((s: any) => s.type === type);
     return res.json({
