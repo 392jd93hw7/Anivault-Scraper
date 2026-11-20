@@ -72,7 +72,7 @@ async function anilistRequest(query: string, variables: Record<string, number>):
   return data;
 }
 
-export async function getZokoAnimeEpisodes(malId: number, title = 'Anime'): Promise<ZokoAnimeEpisode[]> {
+export async function getZokoAnimeEpisodes(malId: number): Promise<ZokoAnimeEpisode[]> {
   if (!Number.isInteger(malId) || malId <= 0) return [];
   const key = `zokoanime:episodes:${malId}`;
   const cached = cacheGet<ZokoAnimeEpisode[]>(key);
