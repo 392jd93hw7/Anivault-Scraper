@@ -27,7 +27,7 @@ flowchart LR
     Client -->|2: episodes| API
     Client -->|3: servers| API
     Client -->|4: watch| API
-    API -->|scrape| Sources{{AnimeHeaven · Anikoto · DesiDub · MegaPlay}}
+    API -->|scrape| Sources{{AnimeHeaven · Anikoto · DesiDub · MegaPlay · ZokoAnime}}
     Sources -->|embed / mp4| API
     API -->|proxied stream + subtitles| Client
 
@@ -55,6 +55,7 @@ there's no multi-step resolution required the way playback has.
 | **Anikoto** (anikoto.net) | ✅ Verified | Megacloud/Megaplay decryption + a direct-CDN side channel |
 | **DesiDub** (desidubanime.me) | ✅ Integrated | Multi-audio and dubbed episodes; supports episode/server listing and stream resolution |
 | **MegaPlay Direct** (megaplay.buzz) | ✅ Working | Uses MAL/AniList IDs directly and resolves the player page to HLS without Anikoto title search |
+| **ZokoAnime** (zokoanime.video) | ✅ Integrated | MAL ID-based sub/dub player with HLS extraction and subtitle tracks |
 
 ### Metadata & art
 
@@ -94,7 +95,7 @@ List episodes for a title on a given source.
 | Param | Required | Notes |
 |---|---|---|
 | `anilistId` / `malId` | yes* | *unless `heavenId` is used with `source=animeheaven` |
-| `source` | no | `animeheaven` \| `anikoto` \| `desidub` \| `megaplay` (default `anikoto`) |
+| `source` | no | `animeheaven` \| `anikoto` \| `desidub` \| `megaplay` \| `zokoanime` (default `anikoto`) |
 | `heavenId` | no | manual AnimeHeaven show id |
 ```
 GET /api/episodes?anilistId=20&source=anikoto
@@ -123,7 +124,7 @@ GET /api/servers?malId=20899&ep=1&type=sub&source=megaplay
 Resolve a real, playable stream for an episode — the main playback endpoint.
 | Path param | Notes |
 |---|---|
-| `source` | `animeheaven` \| `anikoto` \| `desidub` \| `megaplay` |
+| `source` | `animeheaven` \| `anikoto` \| `desidub` \| `megaplay` \| `zokoanime` |
 | `id` | AniList id (or `mal-{id}`, or AnimeHeaven id) |
 | `ep` | episode number |
 | `type` | `sub` \| `dub` |
@@ -137,6 +138,7 @@ Resolve a real, playable stream for an episode — the main playback endpoint.
 GET /api/watch/anikoto/20/1/sub
 GET /api/watch/anikoto/mal-21/5/dub?server=Megacloud
 GET /api/watch/megaplay/mal-20899/1/sub
+GET /api/watch/zokoanime/mal-20/1/sub
 → { embedUrl, m3u8, hlsProxyUrl, playbackMode, subtitles[], server, availableServers[], ... }
 ```
 
